@@ -1,0 +1,67 @@
+id: de.distance.pro
+# ACHTUNG: vorläufiger Canonical – vor einer Veröffentlichung mit dem Projekt abstimmen.
+canonical: https://www.medizininformatik-initiative.de/fhir/distance-pro
+name: DistanceProIG
+title: DISTANCE:PRO Implementation Guide
+description: FHIR-Spezifikation des Datensatzes (Catalog of Items) der Studie DISTANCE:PRO auf Basis des MII Kerndatensatzes 2027.
+status: draft
+version: 0.1.0
+fhirVersion: 4.0.1
+copyrightYear: 2026+
+releaseLabel: ci-build
+license: CC-BY-4.0
+jurisdiction: urn:iso:std:iso:3166#DE "Germany"
+publisher:
+  name: DISTANCE:PRO
+  url: https://github.com/DISTANCE-PRO/implementation-guide
+
+# Versionen entsprechen der BOM "MII Kerndatensatz Complete" 2027.0.0-ballot.19
+# (https://github.com/medizininformatik-initiative/kerndatensatz-complete).
+# Es sind nur die Module aufgeführt, auf die dieser IG tatsächlich abbildet.
+dependencies:
+  de.basisprofil.r4: 1.6.0
+  de.medizininformatikinitiative.kerndatensatz.meta: 2027.0.0-ballot
+  de.medizininformatikinitiative.kerndatensatz.base: 2027.0.0-ballot
+  de.medizininformatikinitiative.kerndatensatz.medikation: 2027.0.0-ballot
+  de.medizininformatikinitiative.kerndatensatz.laborbefund: 2027.0.0-ballot
+  de.medizininformatikinitiative.kerndatensatz.consent: 2027.0.0-ballot
+  de.medizininformatikinitiative.kerndatensatz.studie: 2027.0.0-ballot
+  de.medizininformatikinitiative.kerndatensatz.icu: 2027.0.0-ballot.3
+  de.medizininformatikinitiative.kerndatensatz.onkologie: 2027.0.0-ballot.1
+  de.medizininformatikinitiative.kerndatensatz.patho:
+    version: 2027.0.0-ballot
+    # Package nennt keinen IG-Canonical; ohne uri meldet der Publisher IG_DEPENDENCY_DIRECT
+    uri: https://www.medizininformatik-initiative.de/fhir/ext/modul-patho/ImplementationGuide/de.medizininformatikinitiative.kerndatensatz.patho
+  de.medizininformatikinitiative.kerndatensatz.pros: 2027.0.0-ballot.1
+  de.medizininformatikinitiative.kerndatensatz.kardiologie:
+    version: 2027.0.0-ballot
+    # Package nennt keinen IG-Canonical; ohne uri meldet der Publisher IG_DEPENDENCY_DIRECT
+    uri: https://www.medizininformatik-initiative.de/fhir/ext/modul-kardio/ImplementationGuide/de.medizininformatikinitiative.kerndatensatz.kardiologie
+  de.medizininformatikinitiative.kerndatensatz.soziodemographie: 2027.0.0-ballot
+  # ISiK 6 führt ab der 2027er Linie einen Teil der ICU-Vitaldatenprofile
+  de.gematik.isik: 6.0.0
+  hl7.terminology.r4: 7.3.0
+  hl7.fhir.uv.extensions.r4: 5.3.0
+
+pages:
+  index.md:
+    title: DISTANCE:PRO Implementation Guide
+  mapping.md:
+    title: Abbildung des Item-Katalogs auf den MII Kerndatensatz
+  profile.md:
+    title: Profile und Terminologien
+  offene-punkte.md:
+    title: Offene Punkte
+
+menu:
+  Home: index.html
+  Mapping: mapping.html
+  Profile: profile.html
+  Offene Punkte: offene-punkte.html
+  Artefakte: artifacts.html
+
+parameters:
+  i18n-default-lang: de
+
+instanceOptions:
+  manualSliceOrdering: true

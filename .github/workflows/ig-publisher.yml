@@ -1,0 +1,196 @@
+# IG-Build und Veröffentlichung auf GitHub Pages.
+#
+# Nach dem Vorbild von ig-publisher.yml der MII-Kerndatensatzmodule (z. B.
+# kerndatensatzmodul-intensivmedizin): Bei jedem Push laufen SUSHI und der
+# HL7 IG Publisher; das Ergebnis wird in den Branch gh-pages geschrieben.
+#
+#   main            -> Wurzel der Pages-Site
+#   andere Branches -> branches/<branch>/ (Vorschau)
+#
+# Einmalige Einrichtung: Settings -> Pages -> "Deploy from a branch" -> gh-pages / (root).
+#
+# Alle Actions sind auf Commit-SHAs gepinnt; IG Publisher, SUSHI und Jekyll sind
+# im env-Block versioniert, der Publisher zusätzlich per SHA-256 geprüft.
+name: IG build and publish
+
+on:
+  push:
+    branches:
+      - "**"
+      - "!gh-pages"
+  workflow_dispatch:
+
+permissions:
+  contents: write # Push nach gh-pages
+  pull-requests: write # Kommentar mit der Vorschau-URL
+  issues: write # PR-Kommentare laufen über die Issues-API
+
+# Schreibzugriffe auf gh-pages nacheinander, nie parallel.
+concurrency:
+  group: gh-pages-writes
+  cancel-in-progress: false
+
+env:
+  PUBLISHER_VERSION: "2.3.4"
+  PUBLISHER_SHA256: "970922c12eb583bfb4cb6121584b922a236d5904e36413e3545d2fbc248f8e2b"
+  SUSHI_VERSION: "3.20.1"
+  JEKYLL_VERSION: "4.4.1"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+
+      - name: Set up Java (for the IG Publisher)
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Ruby (for Jekyll)
+        uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1.321.0
+        with:
+          ruby-version: "3.3"
+
+      - name: Install Jekyll
+        run: gem install jekyll -v "${JEKYLL_VERSION}"
+
+      - name: Install Graphviz
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y graphviz
+
+      - name: Check that generated mapping files are up to date
+        run: |
+          python3 scripts/build_mapping.py
+          git diff --exit-code -- input/pagecontent/mapping.md input/fsh/generated-logical-model.fsh input/fsh/generated-vs-laborparameter.fsh
+
+      - name: SUSHI compile
+        run: |
+          set -euo pipefail
+          npm install --global "fsh-sushi@${SUSHI_VERSION}"
+          sushi build .
+          test -d fsh-generated/resources
+
+      - name: Build IG with the pinned IG Publisher
+        run: |
+          set -euo pipefail
+          publisher_url="https://github.com/HL7/fhir-ig-publisher/releases/download/${PUBLISHER_VERSION}/publisher.jar"
+          curl --fail --location --silent --show-error "${publisher_url}" --output "${RUNNER_TEMP}/publisher.jar"
+          echo "${PUBLISHER_SHA256}  ${RUNNER_TEMP}/publisher.jar" | sha256sum --check
+          java -Xmx6g -jar "${RUNNER_TEMP}/publisher.jar" -ig ig.ini -tx https://tx.fhir.org
+          test -s output/index.html
+          jq empty output/qa.json
+
+      - name: QA summary
+        run: |
+          {
+            echo "### IG Publisher QA"
+            jq -r '"Errors: \(.errs) · Warnings: \(.warnings) · Hints: \(.hints)"' output/qa.json
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Publish to gh-pages
+        shell: bash
+        env:
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GIT_AUTHOR_NAME: "github-actions[bot]"
+          GIT_AUTHOR_EMAIL: "41898282+github-actions[bot]@users.noreply.github.com"
+        run: |
+          set -euo pipefail
+          remote_url="https://x-access-token:${GITHUB_TOKEN}@github.com/${REPO}.git"
+          rm -rf gh-pages
+          if git ls-remote --heads "${remote_url}" gh-pages | grep -q "."; then
+            git clone --depth 1 --branch gh-pages "${remote_url}" gh-pages
+          else
+            git clone "${remote_url}" gh-pages
+            cd gh-pages
+            git config user.name "${GIT_AUTHOR_NAME}"
+            git config user.email "${GIT_AUTHOR_EMAIL}"
+            git checkout --orphan gh-pages
+            git rm -rf . >/dev/null 2>&1 || true
+            touch .nojekyll
+            git add .nojekyll
+            git commit -m "chore: initialize gh-pages"
+            git push --set-upstream origin gh-pages
+            cd ..
+          fi
+          touch gh-pages/.nojekyll
+
+          if [[ "${BRANCH}" == "main" ]]; then
+            # Wurzel ersetzen, Branch-Vorschauen unter branches/ erhalten.
+            find gh-pages -mindepth 1 -maxdepth 1 ! -name .git ! -name .nojekyll ! -name branches -exec rm -rf {} +
+            target="gh-pages"
+            message="chore: publish main"
+          else
+            target="gh-pages/branches/${BRANCH}"
+            rm -rf "${target}"
+            mkdir -p "${target}"
+            echo "${BRANCH}" > "${target}/.branch-name"
+            message="chore: preview ${BRANCH}"
+          fi
+          cp -R output/. "${target}/"
+          # GitHub lehnt Dateien über 100 MB ab.
+          find "${target}" -name 'full-ig.zip' -size +99M -delete
+
+          cd gh-pages
+          git config user.name "${GIT_AUTHOR_NAME}"
+          git config user.email "${GIT_AUTHOR_EMAIL}"
+          git add --all
+          if git diff --cached --quiet; then
+            echo "No changes to publish for ${BRANCH}."
+            exit 0
+          fi
+          git commit -m "${message}"
+          git push origin gh-pages
+
+      - name: Published URL
+        shell: bash
+        run: |
+          base="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}"
+          if [[ "${GITHUB_REF_NAME}" != "main" ]]; then base="${base}/branches/${GITHUB_REF_NAME}"; fi
+          echo "Published: ${base}/ · QA: ${base}/qa.html" >> "${GITHUB_STEP_SUMMARY}"
+
+  announce:
+    name: Report preview URL
+    if: ${{ github.ref_name != 'main' }}
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Upsert the preview-URL PR comment
+        continue-on-error: true
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          BRANCH_NAME: ${{ github.ref_name }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const branch = process.env.BRANCH_NAME;
+            const marker = '<!-- ig-preview-url -->';
+            const url = `https://${owner}.github.io/${repo}/branches/${branch}/`;
+            const body = `${marker}\n### IG preview\n[Open the rendered IG for branch \`${branch}\`](${url})`;
+            const { data: prs } = await github.rest.pulls.list({ owner, repo, state: 'open', per_page: 100 });
+            const pr = prs.find(p => p.head && p.head.ref === branch);
+            if (!pr) { core.info(`No open PR for branch ${branch}; skipping PR comment.`); return; }
+            const { data: comments } = await github.rest.issues.listComments({ owner, repo, issue_number: pr.number, per_page: 100 });
+            const existing = comments.find(c => typeof c.body === 'string' && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body });
+            }

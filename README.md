@@ -39,11 +39,7 @@ docker run --rm -v "$PWD":/home/publisher/ig -v "$HOME/.fhir":/home/publisher/.f
 
 ## CI und Veröffentlichung
 
-`.github/workflows/ig-publisher.yml` baut den IG bei jedem Push mit SUSHI und dem IG Publisher
-und schreibt das Ergebnis in den Branch `gh-pages`:
-
-* `main` → `https://distance-pro.github.io/implementation-guide/`
-* andere Branches → `https://distance-pro.github.io/implementation-guide/branches/<branch>/`
-
-Einmalige Einrichtung im Repository: *Settings → Pages → Deploy from a branch → `gh-pages` / (root)*.
-Der QA-Bericht des Publishers liegt jeweils unter `qa.html`.
+`.github/workflows/ig-publisher.yml` baut den IG bei jedem Push mit SUSHI und dem IG Publisher.
+Der Stand von `main` wird direkt aus dem Workflow auf GitHub Pages veröffentlicht:
+<https://distance-pro.github.io/implementation-guide/> (QA-Bericht unter `qa.html`).
+Auf anderen Branches wird nur gebaut und geprüft.
